@@ -89,6 +89,8 @@ def scrape_profile_posts(browser, user_profile_url, max_posts=50):
     
     posts_data = []
     post_count = 0
+    no_new_posts_count = 0
+    max_no_new_posts = 3  # Maximum number of consecutive scrolls without new posts
     
     while post_count < max_posts:
         # Parse the page source with BeautifulSoup
@@ -97,6 +99,7 @@ def scrape_profile_posts(browser, user_profile_url, max_posts=50):
         
         # Extract post containers from the HTML
         containers = linkedin_soup.find_all("div", {"class": "social-details-social-counts"})
+        current_post_count = len(posts_data)
         
         # Process each container
         for container in containers:
@@ -132,6 +135,16 @@ def scrape_profile_posts(browser, user_profile_url, max_posts=50):
             post_count += 1
             print(f"Post {post_count} saved.")
             
+        # Check if we found any new posts after this scroll
+        if len(posts_data) == current_post_count:
+            no_new_posts_count += 1
+            print(f"No new posts found after scroll. Attempt {no_new_posts_count}/{max_no_new_posts}")
+            if no_new_posts_count >= max_no_new_posts:
+                print("Stopping scroll as no new posts are being found.")
+                break
+        else:
+            no_new_posts_count = 0  # Reset counter if we found new posts
+            
         # Only scroll if we haven't reached max_posts
         if post_count < max_posts:
             print("Scrolling down to load more posts...")
@@ -152,6 +165,8 @@ def scrape_search_results(browser, search_keyword, max_posts=20):
     
     posts_data = []
     post_count = 0
+    no_new_posts_count = 0
+    max_no_new_posts = 3  # Maximum number of consecutive scrolls without new posts
     
     while post_count < max_posts:
         # Parse the page source with BeautifulSoup
@@ -160,6 +175,7 @@ def scrape_search_results(browser, search_keyword, max_posts=20):
         
         # Extract post containers from the HTML
         post_containers = linkedin_soup.find_all("div", {"class": "update-components-text"})
+        current_post_count = len(posts_data)
         
         # Process each container
         for container in post_containers:
@@ -190,6 +206,16 @@ def scrape_search_results(browser, search_keyword, max_posts=20):
                 print(f"Error processing post: {str(e)}")
                 continue
         
+        # Check if we found any new posts after this scroll
+        if len(posts_data) == current_post_count:
+            no_new_posts_count += 1
+            print(f"No new posts found after scroll. Attempt {no_new_posts_count}/{max_no_new_posts}")
+            if no_new_posts_count >= max_no_new_posts:
+                print("Stopping scroll as no new posts are being found.")
+                break
+        else:
+            no_new_posts_count = 0  # Reset counter if we found new posts
+            
         # Only scroll if we haven't reached max_posts
         if post_count < max_posts:
             print("Scrolling down to load more posts...")

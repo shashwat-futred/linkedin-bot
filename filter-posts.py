@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 import re
+import argparse
 
 def truncate_post(text, max_words=200):
     """Truncate text to a maximum number of words."""
@@ -15,13 +16,21 @@ def load_hiring_indicators():
     with open('hiring-post-indicator-words.json', 'r') as f:
         return json.load(f)
 
-def remove_hiring_posts():
+def remove_hiring_posts(mode='category'):
     # Load environment variables
     load_dotenv()
     
-    # Get input and output file paths
-    input_file = os.getenv('OUTPUT_FILE', 'all_categories_posts.csv')
-    output_file = os.getenv('FILTERED_POSTS', 'filtered_posts.csv')
+    # Get file paths based on mode
+    if mode == 'user':
+        input_file = os.getenv('USER_POSTS_OUTPUT_FILE', 'user_posts.csv')
+        output_file = os.getenv('FILTERED_USER_POSTS', 'filtered_user_posts.csv')
+    else:  # category mode
+        input_file = os.getenv('OUTPUT_FILE', 'all_categories_posts.csv')
+        output_file = os.getenv('FILTERED_POSTS', 'filtered_posts.csv')
+    
+    if not os.path.exists(input_file):
+        print(f"No input file found at {input_file}. Please run scraping first.")
+        return None
     
     # Load hiring indicator words
     hiring_indicators = load_hiring_indicators()
@@ -82,11 +91,20 @@ def likes_filter(input_file):
     print(f"Final filtered posts saved to: {input_file}")
 
 def main():
-    # First remove hiring posts
-    filtered_file = remove_hiring_posts()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Filter LinkedIn posts')
+    parser.add_argument('--mode', choices=['category', 'user'], default='category',
+                      help='Filtering mode: category (default) or user')
+    args = parser.parse_args()
     
-    # Then filter by likes
-    likes_filter(filtered_file)
+    # First remove hiring posts
+    filtered_file = remove_hiring_posts(mode=args.mode)
+    
+    if filtered_file:
+        # Then filter by likes
+        likes_filter(filtered_file)
+    else:
+        print("No posts to filter. Please run scraping first.")
 
 if __name__ == "__main__":
     main() 

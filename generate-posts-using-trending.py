@@ -11,7 +11,7 @@ from datetime import datetime
 
 class Topic(BaseModel):
     topic: str = Field(description="A specific topic extracted from the trending content")
-    description: str = Field(description="Brief description of why this topic is trending")
+    example: str = Field(description="relevant example to illustrate the point")
 
 class TopicsList(BaseModel):
     topics: List[Topic] = Field(description="List of topics extracted from the trending content")
@@ -19,12 +19,12 @@ class TopicsList(BaseModel):
 class GeneratedPost(BaseModel):
     content: str = Field(description="The generated post content")
     hashtags: List[str] = Field(description="List of relevant hashtags for the post")
-    topic: str = Field(description="The topic this post is about")
+    topic: str = Field(description="The topic this post is about along with the example")
 
 def load_trending_content():
     # Load environment variables
     load_dotenv()
-    filtered_file = os.getenv('FILTERED_POSTS', 'filtered_posts.csv')
+    filtered_file = os.getenv('FILTERED_USER_POSTS', 'filtered_user_posts.csv')
     
     # Read the CSV file
     df = pd.read_csv(filtered_file)
@@ -48,10 +48,17 @@ def extract_topics(model, trending_content):
     # Create the prompt template for topic extraction
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a professional linkedin content analyst. 
-        Analyze the following trending posts and identify the top 10 most recurring and engaging topics and the latest thing or sentiment that is being talked about that topic.
-        The topic will be a sentence that captures the essence of the conversation, but not too generic.
+        Analyze the following trending posts and identify the top 10 most recurring and engaging topics and the latest news or event that is being talked about that topic.
+        Topic and brief are used interchangeably.
+        TOPIC HAS TO INCLUDE THE SPECIFICS FROM THE POST(s) FROM WHICH IT IS EXTRACTED.
+        The brief/topic has to be about specific recent events, news, or trends.
+        Choose a topic that is trending right now, not something generic which can be posted on any day. Name the people, products, services, companies or events involved.
+        If an example is given in the trending posts, you have to use that example, or a similar example along with the topic.
         If a relevant topic involves a trending product, service, person, or company, include that in the topic.
-        For each topic, provide a brief description of why it's trending.
+        We are from the edtech sector, so we are more interested in topics relevant to us.
+        We want to include the latest events and news that are being talked about in the trending posts.
+        For each topic, provide a relevant and engaging example to illustrate the point.
+        The example is to be extracted from the trending posts.
         
         {format_instructions}"""),
         ("user", "Here are the trending posts to analyze:\n\n{trending_content}")
@@ -80,15 +87,18 @@ def generate_post_for_topic(model, topic, parser):
         2. Includes relevant hashtags
         3. Maintains a professional tone
         4. Is optimized for LinkedIn's algorithm
+        5. Is relevant to current time, not just generic
+        6. Uses the example to illustrate the point in an engaging way
+        7. Use the example as a hook to start the post. Nobody reads a posts which directly starts with advice or generic opinion. it should start with a hook, preferably based on the example.
         
         {format_instructions}"""),
-        ("user", "Create a LinkedIn post about this topic:\n\nTopic: {topic}\nDescription: {description}")
+        ("user", "Create a LinkedIn post about this topic:\n\nTopic: {topic}\nExample: {example}")
     ])
     
     # Format the prompt
     formatted_prompt = prompt.format_messages(
         topic=topic.topic,
-        description=topic.description,
+        example=topic.example,
         format_instructions=parser.get_format_instructions()
     )
     
@@ -150,7 +160,7 @@ def main():
         print("Generating posts for each topic...")
         generated_posts = []
         for topic in topics:
-            print(f"Generating post for topic: {topic.topic}")
+            print(f"Generating post for topic: {topic.topic} example: {topic.example}")
             post = generate_post_for_topic(model, topic, post_parser)
             generated_posts.append(post)
         
