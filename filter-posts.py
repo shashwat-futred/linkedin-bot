@@ -66,12 +66,12 @@ def remove_hiring_posts(mode='category'):
     
     return output_file
 
-def likes_filter(input_file):
+def likes_filter(input_file, min_likes):
     # Load environment variables
     load_dotenv()
     
     # Get minimum likes threshold
-    min_likes = int(os.getenv('LIKES_FILTER', 10))
+    min_likes = int(os.getenv('LIKES_FILTER')) if min_likes is None else min_likes
     
     print(f"\nFiltering posts with less than {min_likes} likes...")
     df = pd.read_csv(input_file)
@@ -95,6 +95,8 @@ def main():
     parser = argparse.ArgumentParser(description='Filter LinkedIn posts')
     parser.add_argument('--mode', choices=['category', 'user'], default='category',
                       help='Filtering mode: category (default) or user')
+    parser.add_argument('--likes_filter', type=int, default=None,
+                      help='Minimum likes filter')
     args = parser.parse_args()
     
     # First remove hiring posts
@@ -102,7 +104,7 @@ def main():
     
     if filtered_file:
         # Then filter by likes
-        likes_filter(filtered_file)
+        likes_filter(filtered_file, args.likes_filter)
     else:
         print("No posts to filter. Please run scraping first.")
 

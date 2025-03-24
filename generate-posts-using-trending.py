@@ -9,17 +9,17 @@ from pydantic import BaseModel, Field
 from typing import List
 from datetime import datetime
 
-class Topic(BaseModel):
-    topic: str = Field(description="A specific topic extracted from the trending content")
-    example: str = Field(description="relevant example to illustrate the point")
+class Summary(BaseModel):
+    summary: str = Field(description="Something that is being talked about in the trending content along with relevant examples")
 
-class TopicsList(BaseModel):
-    topics: List[Topic] = Field(description="List of topics extracted from the trending content")
+class SummaryList(BaseModel):
+    summaries: List[Summary] = Field(description="List of summaries extracted from the trending content")
 
 class GeneratedPost(BaseModel):
     content: str = Field(description="The generated post content")
     hashtags: List[str] = Field(description="List of relevant hashtags for the post")
-    topic: str = Field(description="The topic this post is about along with the example")
+    topic: str = Field(description="The topic/news this post is about")
+    summary: str = Field(description="The original summary/topic this post was generated from")
 
 def load_trending_content():
     # Load environment variables
@@ -43,22 +43,24 @@ def load_trending_content():
 
 def extract_topics(model, trending_content):
     # Initialize the output parser for topics
-    parser = PydanticOutputParser(pydantic_object=TopicsList)
+    parser = PydanticOutputParser(pydantic_object=SummaryList)
     
     # Create the prompt template for topic extraction
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a professional linkedin content analyst. 
-        Analyze the following trending posts and identify the top 10 most recurring and engaging topics and the latest news or event that is being talked about that topic.
-        Topic and brief are used interchangeably.
-        TOPIC HAS TO INCLUDE THE SPECIFICS FROM THE POST(s) FROM WHICH IT IS EXTRACTED.
-        The brief/topic has to be about specific recent events, news, or trends.
-        Choose a topic that is trending right now, not something generic which can be posted on any day. Name the people, products, services, companies or events involved.
-        If an example is given in the trending posts, you have to use that example, or a similar example along with the topic.
-        If a relevant topic involves a trending product, service, person, or company, include that in the topic.
-        We are from the edtech sector, so we are more interested in topics relevant to us.
+        Analyze the following trending posts and identify the top 10 most recurring topics or the latest news or event that is being talked about.
+        Write summary of each of those 10.
+        Summary HAS TO INCLUDE THE SPECIFICS FROM THE POST(s) FROM WHICH IT IS EXTRACTED.
+        The summary has to be about specific recent events, news, or trends.
+        Choose topics that is trending right now, not something generic which can be posted on any day. Name the people, products, services, companies or events involved.
+        If an example is given in the trending posts, you have to use that example to illustrate your point.
+        If a relevant topic involves a trending product, service, person, or company, include that in the summary.
+        We are from the edtech sector, so we are more interested in topics relevant to education, tech, business, students.
         We want to include the latest events and news that are being talked about in the trending posts.
-        For each topic, provide a relevant and engaging example to illustrate the point.
-        The example is to be extracted from the trending posts.
+        In each summary, provide a relevant and engaging example to illustrate the point.
+        
+        IMPORTANT: Provide your response in clean JSON format without any markdown formatting or code block markers.
+        The response should be a valid JSON object that can be parsed directly.
         
         {format_instructions}"""),
         ("user", "Here are the trending posts to analyze:\n\n{trending_content}")
@@ -70,15 +72,27 @@ def extract_topics(model, trending_content):
         format_instructions=parser.get_format_instructions()
     )
     
-    # Generate the response
-    response = model.invoke(formatted_prompt)
-    
-    # Parse the response
-    topics_list = parser.parse(response.content)
-    
-    return topics_list.topics
+    try:
+        # Generate the response
+        response = model.invoke(formatted_prompt)
+        
+        # Clean the response content by removing any markdown formatting
+        cleaned_content = response.content.strip()
+        if cleaned_content.startswith('```json'):
+            cleaned_content = cleaned_content[7:]
+        if cleaned_content.endswith('```'):
+            cleaned_content = cleaned_content[:-3]
+        cleaned_content = cleaned_content.strip()
+        
+        # Parse the response
+        summary_list = parser.parse(cleaned_content)
+        return summary_list.summaries
+    except Exception as e:
+        print(f"Error parsing topics: {str(e)}")
+        print("Raw response:", response.content)
+        raise
 
-def generate_post_for_topic(model, topic, parser):
+def generate_post_for_topic(model, summary, parser):
     # Create the prompt template for post generation
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a professional LinkedIn content creator. 
@@ -91,25 +105,40 @@ def generate_post_for_topic(model, topic, parser):
         6. Uses the example to illustrate the point in an engaging way
         7. Use the example as a hook to start the post. Nobody reads a posts which directly starts with advice or generic opinion. it should start with a hook, preferably based on the example.
         
+        IMPORTANT: Provide your response in clean JSON format without any markdown formatting or code block markers.
+        The response should be a valid JSON object that can be parsed directly.
+        
         {format_instructions}"""),
-        ("user", "Create a LinkedIn post about this topic:\n\nTopic: {topic}\nExample: {example}")
+        ("user", "Create a LinkedIn post about this topic:\n\nTopic: {summary}")
     ])
     
     # Format the prompt
     formatted_prompt = prompt.format_messages(
-        topic=topic.topic,
-        example=topic.example,
+        summary=summary.summary,
         format_instructions=parser.get_format_instructions()
     )
     
-    # Generate the response
-    response = model.invoke(formatted_prompt)
-    
-    # Parse the response
-    generated_post = parser.parse(response.content)
-    generated_post.topic = topic.topic  # Add the topic to the post
-    
-    return generated_post
+    try:
+        # Generate the response
+        response = model.invoke(formatted_prompt)
+        
+        # Clean the response content by removing any markdown formatting
+        cleaned_content = response.content.strip()
+        if cleaned_content.startswith('```json'):
+            cleaned_content = cleaned_content[7:]
+        if cleaned_content.endswith('```'):
+            cleaned_content = cleaned_content[:-3]
+        cleaned_content = cleaned_content.strip()
+        
+        # Parse the response
+        generated_post = parser.parse(cleaned_content)
+        generated_post.summary = summary.summary  # Add the original summary
+        
+        return generated_post
+    except Exception as e:
+        print(f"Error generating post: {str(e)}")
+        print("Raw response:", response.content)
+        raise
 
 def save_generated_posts(posts):
     # Create output directory if it doesn't exist
@@ -149,19 +178,19 @@ def main():
         )
         
         # Initialize the output parsers
-        topic_parser = PydanticOutputParser(pydantic_object=Topic)
+        topic_parser = PydanticOutputParser(pydantic_object=Summary)
         post_parser = PydanticOutputParser(pydantic_object=GeneratedPost)
         
         # Extract topics
         print("Extracting topics from trending content...")
-        topics = extract_topics(model, trending_content)
+        summaries = extract_topics(model, trending_content)
         
         # Generate posts for each topic
         print("Generating posts for each topic...")
         generated_posts = []
-        for topic in topics:
-            print(f"Generating post for topic: {topic.topic} example: {topic.example}")
-            post = generate_post_for_topic(model, topic, post_parser)
+        for summary in summaries:
+            print(f"Generating post for topic: {summary.summary}")
+            post = generate_post_for_topic(model, summary, post_parser)
             generated_posts.append(post)
         
         # Save all generated posts

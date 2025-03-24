@@ -60,13 +60,13 @@ def scrape_user(browser, profile_url, posts_per_user):
         print(f"\nError scraping user '{profile_url}': {str(e)}")
         return None
 
-def main():
+def main(num_users=None, posts_per_user=None):
     # Load environment variables
     load_dotenv()
     
     # Get configuration
-    num_users = int(os.getenv('NUM_USERS', 10))  # Default to 10 users
-    posts_per_user = int(os.getenv('POSTS_PER_USER', 20))  # Default to 20 posts per user
+    num_users = int(os.getenv('NUM_USERS')) if num_users is None else num_users
+    posts_per_user = int(os.getenv('POSTS_PER_USER')) if posts_per_user is None else posts_per_user
     output_file = os.getenv('USER_POSTS_OUTPUT_FILE', 'user_posts.csv')
     
     # Load users
@@ -93,7 +93,7 @@ def main():
                 all_posts_df = pd.concat([all_posts_df, df], ignore_index=True)
             
             # Add a small delay between users to avoid rate limiting
-            time.sleep(3)
+            time.sleep(2)
         
         # Save all results to CSV
         all_posts_df.to_csv(output_file, index=False)
@@ -104,4 +104,8 @@ def main():
         browser.quit()
 
 if __name__ == "__main__":
-    main() 
+    import sys
+    # Get command line arguments if provided
+    num_users = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    posts_per_user = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    main(num_users, posts_per_user) 
