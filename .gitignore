@@ -1,6 +1,9 @@
  # Environment variables
 .env
 
+# Generated posts
+generated_posts/
+
 # Python
 __pycache__/
 *.py[cod]

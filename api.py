@@ -10,7 +10,8 @@ import json
 from datetime import datetime
 import tempfile
 from dotenv import load_dotenv
-
+from getHashtags import get_top_hashtags
+from generate_using_web import generate_posts_from_web
 app = FastAPI(title="LinkedIn Post Automation API")
 
 # Add CORS middleware
@@ -29,6 +30,7 @@ class CookiesRequest(BaseModel):
     postsPerUser: Optional[int] = None
     minLikes: Optional[int] = None
     useOnlyInputProfiles: Optional[bool] = False
+    customInstructions: Optional[str] = None
 
 class TestResponse(BaseModel):
     status: str
@@ -184,6 +186,8 @@ async def scrape_user_posts(request: CookiesRequest):
         posts_per_user = request.postsPerUser
 
         likes_filter = request.minLikes
+
+        custom_instructions = request.customInstructions
         
         default_users = get_default_users()
 
@@ -216,14 +220,45 @@ async def scrape_user_posts(request: CookiesRequest):
         print("Filtering completed, starting post generation...")
         time.sleep(2)
         
-        if not run_script('generate-posts-using-trending.py'):
-            raise HTTPException(status_code=500, detail="Post generation failed")
+        # Run generate-posts-using-trending.py with custom instructions
+        # if custom_instructions:
+        #     # Escape any quotes in the custom instructions
+        #     escaped_instructions = custom_instructions.replace('"', '\\"')
+        #     if not run_script(['python', 'generate-posts-using-trending.py', f'--custom_instructions={escaped_instructions}']):
+        #         raise HTTPException(status_code=500, detail="Post generation failed")
+        # else:
+        #     if not run_script('generate-posts-using-trending.py'):
+        #         raise HTTPException(status_code=500, detail="Post generation failed")
+
+        trending_content = ""
+        with open("filtered_user_posts.csv", "r", encoding="utf-8") as f:
+            trending_content = f.read()
+        
+        posts = generate_posts_from_web(
+        trending_content,
+        )
+
+        print(posts)
+
+        # save posts to txt
+        with open("generated_posts.txt", "w") as f:
+            for post in posts:
+                f.write(f"Topic: {post.topic}\n\n")
+                f.write(post.content + "\n")
+                f.write("--------------------------------\n")
         
         print("Post generation completed, retrieving results...")
         # Get the generated posts
         try:
             generated_posts = get_latest_generated_posts()
-            return {"status": "success", "generated_posts": generated_posts}
+            # Get top hashtags
+            top_hashtags = get_top_hashtags()
+            
+            return {
+                "status": "success", 
+                "generated_posts": generated_posts,
+                "top_hashtags": top_hashtags
+            }
         except HTTPException as e:
             print(f"Error retrieving generated posts: {str(e)}")
             return {"status": "partial_success", "message": "Posts were scraped but generation failed", "error": str(e)}

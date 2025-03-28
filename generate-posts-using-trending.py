@@ -8,6 +8,7 @@ from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List
 from datetime import datetime
+import argparse
 
 class Summary(BaseModel):
     summary: str = Field(description="Something that is being talked about in the trending content along with relevant examples")
@@ -41,9 +42,11 @@ def load_trending_content():
     
     return trending_content
 
-def extract_topics(model, trending_content):
+def extract_topics(model, trending_content, custom_instructions=""):
     # Initialize the output parser for topics
     parser = PydanticOutputParser(pydantic_object=SummaryList)
+
+    print(custom_instructions)
     
     # Create the prompt template for topic extraction
     prompt = ChatPromptTemplate.from_messages([
@@ -58,6 +61,11 @@ def extract_topics(model, trending_content):
         We are from the edtech sector, so we are more interested in topics relevant to education, tech, business, students.
         We want to include the latest events and news that are being talked about in the trending posts.
         In each summary, provide a relevant and engaging example to illustrate the point.
+        Keep some variation in the types of posts. All posts not to be of similar type.
+        
+        VERY IMPORTANT: {custom_instructions}
+         
+        Dont write the post right now, just write the required summaries.
         
         IMPORTANT: Provide your response in clean JSON format without any markdown formatting or code block markers.
         The response should be a valid JSON object that can be parsed directly.
@@ -65,12 +73,16 @@ def extract_topics(model, trending_content):
         {format_instructions}"""),
         ("user", "Here are the trending posts to analyze:\n\n{trending_content}")
     ])
+
     
     # Format the prompt
     formatted_prompt = prompt.format_messages(
         trending_content=trending_content,
-        format_instructions=parser.get_format_instructions()
+        format_instructions=parser.get_format_instructions(),
+        custom_instructions=custom_instructions
     )
+
+    print(formatted_prompt)
     
     try:
         # Generate the response
@@ -92,7 +104,7 @@ def extract_topics(model, trending_content):
         print("Raw response:", response.content)
         raise
 
-def generate_post_for_topic(model, summary, parser):
+def generate_post_for_topic(model, summary, parser, custom_instructions=""):
     # Create the prompt template for post generation
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a professional LinkedIn content creator. 
@@ -103,8 +115,43 @@ def generate_post_for_topic(model, summary, parser):
         4. Is optimized for LinkedIn's algorithm
         5. Is relevant to current time, not just generic
         6. Uses the example to illustrate the point in an engaging way
-        7. Use the example as a hook to start the post. Nobody reads a posts which directly starts with advice or generic opinion. it should start with a hook, preferably based on the example.
+         
+        You are creating content for Futred, which is a platform for stuents to learn tech, ai, business and other skills and get work oppotunities.
+        You do not neccessarily have to mention the brand in the post, but keep it relevant to the brand.
         
+        You have to use the following 6 elements to create the post:
+
+        1. Hook (49 characters)
+Grabs attention immediately—short, punchy, and intriguing. Use curiosity, bold statements, or emotional appeal to stop the scroll.
+Examples: "I made a huge mistake today." "This post format is going viral."
+
+2. Re-Hook (51 characters)
+Builds on the hook and tells readers what value they'll get. Use numbers, results, or outcomes to spark interest and credibility.
+Example: "12 posts got 38K likes, 11K comments, 3K reposts."
+
+3. Body Text (953 characters)
+Delivers the promised value with structure—bullets, short sentences, and clear flow. Use real stories, examples, data, or tips to inform and engage.
+
+4. End of Body Text (132 characters)
+Wraps up with a persuasive, engaging message. Reinforce the value or takeaway, often with a casual or personal tone to set up the CTA.
+Example: "Now, off to the comments…"
+
+5. CTA (72 characters)
+Prompts immediate action—comment, click, download, or engage. Make it direct and compelling.
+Example: "Are you ready to try this on your next post?"
+
+6. Second CTA (63 characters)
+Gently reminds readers to share. Keep it friendly and subtle, often with emojis for added visibility.
+Example: "Don't forget to repost ♻️ this for others."
+         
+        It is not neccessary to use all the 6 elements, or stick to the exact character count. But try to follow the structure as closely as possible.
+         
+        ---
+
+        VERY IMPORTANT: {custom_instructions}
+         
+        ---
+
         IMPORTANT: Provide your response in clean JSON format without any markdown formatting or code block markers.
         The response should be a valid JSON object that can be parsed directly.
         
@@ -115,7 +162,8 @@ def generate_post_for_topic(model, summary, parser):
     # Format the prompt
     formatted_prompt = prompt.format_messages(
         summary=summary.summary,
-        format_instructions=parser.get_format_instructions()
+        format_instructions=parser.get_format_instructions(),
+        custom_instructions=custom_instructions
     )
     
     try:
@@ -161,7 +209,7 @@ def save_generated_posts(posts):
     
     print(f"\nGenerated posts saved to: {filename}")
 
-def main():
+def main(custom_instructions=""):
     try:
         # Load trending content
         print("Loading trending content...")
@@ -176,6 +224,12 @@ def main():
             temperature=float(os.getenv('OPENAI_TEMPERATURE', 0.7)),
             openai_api_key=os.getenv('OPENAI_API_KEY')
         )
+
+        modelBig = ChatOpenAI(
+            model=os.getenv('OPENAI_MODEL', 'gpt-4o'),
+            temperature=float(os.getenv('OPENAI_TEMPERATURE', 0.7)),
+            openai_api_key=os.getenv('OPENAI_API_KEY')
+        )
         
         # Initialize the output parsers
         topic_parser = PydanticOutputParser(pydantic_object=Summary)
@@ -183,14 +237,14 @@ def main():
         
         # Extract topics
         print("Extracting topics from trending content...")
-        summaries = extract_topics(model, trending_content)
+        summaries = extract_topics(model, trending_content, custom_instructions)
         
         # Generate posts for each topic
         print("Generating posts for each topic...")
         generated_posts = []
         for summary in summaries:
             print(f"Generating post for topic: {summary.summary}")
-            post = generate_post_for_topic(model, summary, post_parser)
+            post = generate_post_for_topic(modelBig, summary, post_parser, custom_instructions)
             generated_posts.append(post)
         
         # Save all generated posts
@@ -203,4 +257,8 @@ def main():
     return True
 
 if __name__ == "__main__":
-    main() 
+    parser = argparse.ArgumentParser(description='Generate posts from trending content')
+    parser.add_argument('--custom_instructions', type=str, help='Custom instructions for content generation')
+    args = parser.parse_args()
+    
+    main(args.custom_instructions if args.custom_instructions else "") 

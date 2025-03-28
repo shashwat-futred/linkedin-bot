@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from generate_using_web import generate_posts_from_web
 
 def run_script(script_name):
     print(f"\n{'='*50}")
@@ -72,16 +73,33 @@ def run_user_scraping():
 def run_post_generation():
     # Load environment variables
     load_dotenv()
-    filtered_file = os.getenv('FILTERED_POSTS', 'filtered_posts.csv')
+    trending_content = ""
+    with open("filtered_user_posts.csv", "r", encoding="utf-8") as f:
+        trending_content = f.read()
+        
+    posts = generate_posts_from_web(
+    trending_content,
+    )
+
+    print(posts)
+
+        # save posts to txt
+    with open("generated_posts.txt", "w") as f:
+        for post in posts:
+            f.write(f"Topic: {post.topic}\n\n")
+            f.write(post.content + "\n")
+            f.write("--------------------------------\n")
+
+    return True
     
     # Check if filtered posts file exists
-    if not os.path.exists(filtered_file):
-        print(f"\nError: {filtered_file} not found!")
-        print("Please run the full process first to generate filtered posts.")
-        return False
+    # if not os.path.exists(filtered_file):
+    #     print(f"\nError: {filtered_file} not found!")
+    #     print("Please run the full process first to generate filtered posts.")
+    #     return False
     
     # Run post generation script
-    return run_script('generate-posts-using-trending.py')
+    # return run_script('generate-posts-using-trending.py')
 
 def main():
     print("\nLinkedIn Post Automation")

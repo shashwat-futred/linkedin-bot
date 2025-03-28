@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import re
 import argparse
-
+import time
 def truncate_post(text, max_words=200):
     """Truncate text to a maximum number of words."""
     words = text.split()
@@ -26,7 +26,7 @@ def remove_hiring_posts(mode='category'):
         output_file = os.getenv('FILTERED_USER_POSTS', 'filtered_user_posts.csv')
     else:  # category mode
         input_file = os.getenv('OUTPUT_FILE', 'all_categories_posts.csv')
-        output_file = os.getenv('FILTERED_POSTS', 'filtered_posts.csv')
+        output_file = os.getenv('FILTERED_POSTS', f'filtered_posts.csv')
     
     if not os.path.exists(input_file):
         print(f"No input file found at {input_file}. Please run scraping first.")
@@ -66,7 +66,7 @@ def remove_hiring_posts(mode='category'):
     
     return output_file
 
-def likes_filter(input_file, min_likes):
+def likes_filter(input_file, min_likes=50):
     # Load environment variables
     load_dotenv()
     
@@ -79,7 +79,13 @@ def likes_filter(input_file, min_likes):
     
     # Filter posts based on likes count
     df = df[df['Reactions'] >= min_likes]
-    
+    df = df[df['Comments'] >= 10]
+
+    #keep only top 30 posts based on likes
+    df = df.sort_values(by='Reactions', ascending=False).head(60)
+    n = 30 if len(df.index) > 30 else len(df.index)
+    df = df.sample(n)
+
     # Save filtered posts
     df.to_csv(input_file, index=False)
     removed_count = initial_count - len(df)

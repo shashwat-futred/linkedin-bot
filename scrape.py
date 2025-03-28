@@ -149,7 +149,7 @@ def scrape_profile_posts(browser, user_profile_url, max_posts=50):
         if post_count < max_posts:
             print("Scrolling down to load more posts...")
             browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(10)
+            time.sleep(5)
     
     return posts_data
 

@@ -16,19 +16,36 @@ def load_users():
 def get_username_from_url(url):
     return url #url is currently same as username
 
+def save_failed_username(username: str):
+    """Save failed username to bad-usernames.txt"""
+    with open('bad-usernames.txt', 'a') as f:
+        f.write(f"{username}\n")
+
 def scrape_user(browser, profile_url, posts_per_user):
     try:
         # Get username from profile URL
         username = get_username_from_url(profile_url)
         if not username:
             print(f"\nError: Could not extract username from URL: {profile_url}")
+            save_failed_username(profile_url)
             return None
 
         # Construct the activity URL
         activity_url = f"https://www.linkedin.com/in/{username}/recent-activity/all/"
         
-        # Check if page exists (not 404)
-        browser.get(activity_url)
+        # Set page load timeout to 10 seconds
+        browser.set_page_load_timeout(10)
+        
+        try:
+            # Check if page exists (not 404)
+            browser.get(activity_url)
+        except Exception as e:
+            print(f"\nSkipping user {username}: Page load timeout or error")
+            save_failed_username(username)
+            return None
+        
+        # Reset timeout for element operations
+        browser.set_page_load_timeout(30)
         time.sleep(2)  # Wait for page to load
         
         # Check for 404 message
@@ -36,13 +53,24 @@ def scrape_user(browser, profile_url, posts_per_user):
             error_message = browser.find_element("css selector", "p.artdeco-empty-state__message")
             if error_message and "Please check your URL" in error_message.text:
                 print(f"\nSkipping user {username}: Profile not found (404)")
+                save_failed_username(username)
                 return None
         except:
             pass  # No 404 message found, continue with scraping
         
         # Use the scrape_profile_posts function to get posts
-        posts_data = scrape_profile_posts(browser, activity_url, posts_per_user)
+        try:
+            posts_data = scrape_profile_posts(browser, activity_url, posts_per_user)
+        except Exception as e:
+            print(f"\nSkipping user {username}: Error during post scraping")
+            save_failed_username(username)
+            return None
         
+        if not posts_data:
+            print(f"\nSkipping user {username}: No posts found")
+            save_failed_username(username)
+            return None
+            
         # Save to temporary CSV
         save_to_csv(posts_data, 'profile_posts.csv')
         
@@ -58,6 +86,7 @@ def scrape_user(browser, profile_url, posts_per_user):
         return df
     except Exception as e:
         print(f"\nError scraping user '{profile_url}': {str(e)}")
+        save_failed_username(profile_url)
         return None
 
 def main(num_users=None, posts_per_user=None):
