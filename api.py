@@ -185,9 +185,11 @@ async def scrape_user_posts(request: CookiesRequest):
 
         posts_per_user = request.postsPerUser
 
-        likes_filter = request.minLikes
+        likes_filter = 100 if (num_users * posts_per_user) < 200 else 400
 
         custom_instructions = request.customInstructions
+
+        num_posts = request.numPosts if request.numPosts else 10
         
         default_users = get_default_users()
 
@@ -236,6 +238,8 @@ async def scrape_user_posts(request: CookiesRequest):
         
         posts = generate_posts_from_web(
         trending_content,
+        custom_instructions=custom_instructions,
+        num_posts=num_posts
         )
 
         print(posts)

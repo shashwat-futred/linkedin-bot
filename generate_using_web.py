@@ -6,6 +6,7 @@ from typing import List
 from datetime import datetime
 import json
 from post_guidelines import guideline1, guideline2
+import argparse
 
 class SearchTerm(BaseModel):
     idea: str = Field(description="A search term to find relevant information")
@@ -19,22 +20,26 @@ class GeneratedPost(BaseModel):
     topic: str = Field(description="The topic/news this post is about")
     # search_term: str = Field(description="The search term used to generate this post")
 
-def extract_search_terms(client, trending_content, guideline=""):
+def extract_search_terms(client, trending_content, guideline="", custom_instructions="", num_posts=10):
     """Extract search terms from trending content using GPT-4"""
     prompt = f"""
     {guideline}
+
+    special instructions:
+    {custom_instructions}
+
     -----
 
-Your job is to extract 15 relevant ideas for posts, based on what is trending today, and our guidelines. Below is a list of trending posts. Extract relevant ideas which are not too generic. For each idea, Craft a detailed search term, using which we can find relevant latest articles to refer to in the post to make it more engaging.
-search terms would help find detailed information about the topics.
-Each search term should be specific and targeted to find recent, relevant information.
------
+    Your job is to extract {num_posts} relevant ideas for posts, based on what is trending today, and our guidelines. Below is a list of trending posts. Extract relevant ideas which are not too generic. For each idea, Craft a detailed search term, using which we can find relevant latest articles to refer to in the post to make it more engaging.
+    search terms would help find detailed information about the topics.
+    Each search term should be specific and targeted to find recent, relevant information.
+    -----
     
     Here is the trending content to analyze:
     
     {trending_content}
     
-    Provide your response as a JSON array of 15 objects with "idea" and "search_term" fields, like this:
+    Provide your response as a JSON array of {num_posts} objects with "idea" and "search_term" fields, like this:
     {{"ideas": [{{"idea": "idea 1", "search_term": "search term 1"}}, {{"idea": "idea 2", "search_term": "search term 2"}}, ...]}}"""
     
     try:
@@ -91,11 +96,14 @@ Each search term should be specific and targeted to find recent, relevant inform
         print("Raw response:", response_text)
         raise
 
-def generate_post_from_search(client, search_term, guideline=guideline2):
+def generate_post_from_search(client, search_term, guideline=guideline2, custom_instructions=""):
     """Generate a post using web search capabilities"""
     prompt = f"""You are a professional LinkedIn content creator with web search capabilities.
     
     {guideline}
+
+    special instructions:
+    {custom_instructions}
 
     -----
 
@@ -178,12 +186,14 @@ def generate_post_from_search(client, search_term, guideline=guideline2):
         print("Raw response:", response_text)
         raise
 
-def generate_posts_from_web(trending_content: str) -> List[GeneratedPost]:
+def generate_posts_from_web(trending_content: str, custom_instructions: str = "", num_posts: int = 10) -> List[GeneratedPost]:
     """
     Generate posts using web search capabilities.
     
     Args:
         trending_content (str): The trending content to analyze
+        custom_instructions (str): Custom instructions for content generation
+        num_posts (int): Number of posts to generate
         
     Returns:
         List[GeneratedPost]: List of generated posts
@@ -197,14 +207,17 @@ def generate_posts_from_web(trending_content: str) -> List[GeneratedPost]:
         
         # Extract search terms
         print("Extracting search terms from trending content...")
-        search_terms = extract_search_terms(client, trending_content, guideline1)
+        search_terms = extract_search_terms(client, trending_content, guideline1, custom_instructions, num_posts)
+        
+        # Limit the number of posts to generate
+        search_terms = search_terms[:num_posts]
         
         # Generate posts for each search term
         print("Generating posts for each search term...")
         generated_posts = []
         for search_term in search_terms:
             print(f"Generating post for search term: {search_term.idea}")
-            post = generate_post_from_search(client, search_term, guideline2)
+            post = generate_post_from_search(client, search_term, guideline2, custom_instructions)
             generated_posts.append(post)
         
         return generated_posts
@@ -214,6 +227,11 @@ def generate_posts_from_web(trending_content: str) -> List[GeneratedPost]:
         raise
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Generate posts using web search')
+    parser.add_argument('--custom_instructions', type=str, help='Custom instructions for content generation')
+    parser.add_argument('--num_posts', type=int, default=10, help='Number of posts to generate')
+    args = parser.parse_args()
+    
     # Example usage
     test_content = """
     Recent developments in artificial intelligence and machine learning are transforming industries.
@@ -221,10 +239,9 @@ if __name__ == "__main__":
     and growing adoption of AI in healthcare and finance.
     """
     
-    test_guideline = """
-    Focus on practical applications and real-world examples.
-    Include specific company names and products where relevant.
-    """
-    
-    posts = ["test"]
+    posts = generate_posts_from_web(
+        test_content,
+        custom_instructions=args.custom_instructions if args.custom_instructions else "",
+        num_posts=args.num_posts
+    )
     print(f"Generated {len(posts)} posts")
